@@ -59,7 +59,7 @@ class SheepdogImage(object):
         self.chunk_size = chunk_size
 
     def _run_command(self, command, data, *params):
-        cmd = ("collie vdi %(command)s -a %(addr)s -p %(port)d %(name)s "
+        cmd = ("dog vdi %(command)s -a %(addr)s -p %(port)d %(name)s "
                "%(params)s" %
                {"command": command,
                 "addr": self.addr,
@@ -78,7 +78,7 @@ class SheepdogImage(object):
         """
         Return the size of the this iamge
 
-        Sheepdog Usage: collie vdi list -r -a address -p port image
+        Sheepdog Usage: dog vdi list -r -a address -p port image
         """
         out = self._run_command("list -r", None)
         return long(out.split(' ')[3])
@@ -88,7 +88,7 @@ class SheepdogImage(object):
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
 
-        Sheepdog Usage: collie vdi read -a address -p port image offset len
+        Sheepdog Usage: dog vdi read -a address -p port image offset len
         """
         return self._run_command("read", None, str(offset), str(count))
 
@@ -97,7 +97,7 @@ class SheepdogImage(object):
         Write up to 'count' bytes from the data to this image starting at
         'offset'
 
-        Sheepdog Usage: collie vdi write -a address -p port image offset len
+        Sheepdog Usage: dog vdi write -a address -p port image offset len
         """
         self._run_command("write", data, str(offset), str(count))
 
@@ -105,7 +105,7 @@ class SheepdogImage(object):
         """
         Create this image in the Sheepdog cluster with size 'size'.
 
-        Sheepdog Usage: collie vdi create -a address -p port image size
+        Sheepdog Usage: dog vdi create -a address -p port image size
         """
         self._run_command("create", None, str(size))
 
@@ -113,7 +113,7 @@ class SheepdogImage(object):
         """
         Delete this image in the Sheepdog cluster
 
-        Sheepdog Usage: collie vdi delete -a address -p port image
+        Sheepdog Usage: dog vdi delete -a address -p port image
         """
         self._run_command("delete", None)
 
@@ -121,7 +121,7 @@ class SheepdogImage(object):
         """
         Check if this image exists in the Sheepdog cluster via 'list' command
 
-        Sheepdog Usage: collie vdi list -r -a address -p port image
+        Sheepdog Usage: dog vdi list -r -a address -p port image
         """
         out = self._run_command("list -r", None)
         if not out:
@@ -205,7 +205,7 @@ class Store(glance_store.driver.Store):
                                                    reason=reason)
 
         try:
-            processutils.execute("collie", shell=True)
+            processutils.execute("dog", shell=True)
         except processutils.ProcessExecutionError as exc:
             reason = _("Error in store configuration: %s") % exc
             LOG.error(reason)
