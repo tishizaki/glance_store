@@ -30,6 +30,10 @@ from glance_store import exceptions
 from glance_store.i18n import _
 import glance_store.location
 
+# glance-imageだと分かるようなスナップショットの名前が良いか?
+# magicナンバー的に1としても良いのであれば、この定義は不要
+# cinder側へも変更が必要
+DEFAULT_SNAPNAME='snap'
 
 LOG = logging.getLogger(__name__)
 
@@ -83,14 +87,15 @@ class SheepdogImage(object):
         out = self._run_command("list -r", None)
         return long(out.split(' ')[3])
 
+    # glance-imageからの読み込み用関数なので, snapshotからの読み込みへ変更
     def read(self, offset, count):
         """
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
 
-        Sheepdog Usage: dog vdi read -a address -p port image offset len
+        Sheepdog Usage: dog vdi read -s snap_name -a address -p port image offset len
         """
-        return self._run_command("read", None, str(offset), str(count))
+        return self._run_command("read -s %s" % DEFAULT_SNAPNAME, None, str(offset), str(count))
 
     def write(self, data, offset, count):
         """
@@ -116,6 +121,23 @@ class SheepdogImage(object):
         Sheepdog Usage: dog vdi delete -a address -p port image
         """
         self._run_command("delete", None)
+
+    # glance-imageをsnapshotで保持するように変更するため, snapshot取得と削除用関数追加
+    def create_snapshot(self):
+        """
+        Create this image in the Sheepdog cluster with size 'size'.
+
+        Sheepdog Usage: dog vdi create -a address -p port -s snap_name image size
+        """
+        self._run_command("snapshot -s %s" % DEFAULT_SNAPNAME, None)
+
+    def delete_snapshot(self):
+        """
+        Create this image in the Sheepdog cluster with size 'size'.
+
+        Sheepdog Usage: dog vdi create -a address -p port -s snap_name image size
+        """
+        self._run_command("delete -s %s" % DEFAULT_SNAPNAME, None)
 
     def exist(self):
         """
@@ -291,6 +313,13 @@ class Store(glance_store.driver.Store):
             # error occurs such as ImageSizeLimitExceeded exceptions.
             with excutils.save_and_reraise_exception():
                 image.delete()
+        # try-exceptでのエラーハンドリングは未だ実装していない
+        # glance-imageはsnapshotで保持するために, snapshot取得するよう変更
+        image.create_snapshot()
+
+        # try-exceptでのエラーハンドリングは未だ実装していない
+        # glance-imageはsnapshotで保持するために, currentを削除
+        image.delete()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
 
@@ -312,4 +341,7 @@ class Store(glance_store.driver.Store):
         if not image.exist():
             raise exceptions.NotFound(_("Sheepdog image %s does not exist") %
                                       loc.image)
-        image.delete()
+        # try-exceptでのエラーハンドリングは未だ実装していない
+        # glance-imageはsnapshotで保持するために, glance-imageの削除は
+        # snapshotの削除に相当
+	image.delete_snapshot()
