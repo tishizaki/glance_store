@@ -33,7 +33,7 @@ import glance_store.location
 # glance-imageだと分かるようなスナップショットの名前が良いか?
 # magicナンバー的に1としても良いのであれば、この定義は不要
 # cinder側へも変更が必要
-DEFAULT_SNAPNAME='snap'
+DEFAULT_SNAPNAME = 'snap'
 
 LOG = logging.getLogger(__name__)
 
@@ -93,9 +93,11 @@ class SheepdogImage(object):
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
 
-        Sheepdog Usage: dog vdi read -s snap_name -a address -p port image offset len
+        Sheepdog Usage:
+                 dog vdi read -s snap -a address -p port image offset len
         """
-        return self._run_command("read -s %s" % DEFAULT_SNAPNAME, None, str(offset), str(count))
+        return self._run_command("read -s %s" % DEFAULT_SNAPNAME,
+                                 None, str(offset), str(count))
 
     def write(self, data, offset, count):
         """
@@ -122,12 +124,13 @@ class SheepdogImage(object):
         """
         self._run_command("delete", None)
 
-    # glance-imageをsnapshotで保持するように変更するため, snapshot取得と削除用関数追加
+    # glance-imageをsnapshotで保持するように変更するため,
+    # snapshot取得と削除用関数追加
     def create_snapshot(self):
         """
         Create this image in the Sheepdog cluster with size 'size'.
 
-        Sheepdog Usage: dog vdi create -a address -p port -s snap_name image size
+        Sheepdog Usage: dog vdi create -s snap -a address -p port image size
         """
         self._run_command("snapshot -s %s" % DEFAULT_SNAPNAME, None)
 
@@ -135,7 +138,7 @@ class SheepdogImage(object):
         """
         Create this image in the Sheepdog cluster with size 'size'.
 
-        Sheepdog Usage: dog vdi create -a address -p port -s snap_name image size
+        Sheepdog Usage: dog vdi create -s snap -a address -p port image size
         """
         self._run_command("delete -s %s" % DEFAULT_SNAPNAME, None)
 
@@ -344,4 +347,4 @@ class Store(glance_store.driver.Store):
         # try-exceptでのエラーハンドリングは未だ実装していない
         # glance-imageはsnapshotで保持するために, glance-imageの削除は
         # snapshotの削除に相当
-	image.delete_snapshot()
+        image.delete_snapshot()
