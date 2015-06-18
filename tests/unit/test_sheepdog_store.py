@@ -44,11 +44,16 @@ class TestSheepdogStore(base.StoreBaseTest,
         self.store = sheepdog.Store(self.conf)
         self.store.configure()
 
+        self.called_commands = []
+        self.loc = location.Location('test_sheepdog_store',
+                                     sheepdog.StoreLocation,
+                                     self.conf,
+                                     store_specs={'image': 'fake_image'})
+
     def test_cleanup_when_add_image_exception(self):
-        called_commands = []
 
         def _fake_run_command(command, data, *params):
-            called_commands.append(command)
+            self.called_commands.append(command)
 
         with mock.patch.object(sheepdog.SheepdogImage, '_run_command') as cmd:
             cmd.side_effect = _fake_run_command
@@ -57,7 +62,5 @@ class TestSheepdogStore(base.StoreBaseTest,
             self.assertEqual(called_commands, ['list -r', 'create', 'write'])
 
     def test_partial_get(self):
-        loc = location.Location('test_sheepdog_store', sheepdog.StoreLocation,
-                                self.conf, store_specs={'image': 'fake_image'})
         self.assertRaises(exceptions.StoreRandomGetNotSupported,
-                          self.store.get, loc, chunk_size=1)
+                          self.store.get, self.loc, chunk_size=1)
