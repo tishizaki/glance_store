@@ -30,9 +30,7 @@ from glance_store import exceptions
 from glance_store.i18n import _
 import glance_store.location
 
-# glance-imageだと分かるようなスナップショットの名前が良いか?
-# magicナンバー的に1としても良いのであれば、この定義は不要
-# cinder側へも変更が必要
+# set default snapshot name
 DEFAULT_SNAPNAME = 'snap'
 
 LOG = logging.getLogger(__name__)
@@ -87,7 +85,7 @@ class SheepdogImage(object):
         out = self._run_command("list -r", None)
         return long(out.split(' ')[3])
 
-    # glance-imageからの読み込み用関数なので, snapshotからの読み込みへ変更
+    # read from snapshot image
     def read(self, offset, count):
         """
         Read up to 'count' bytes from this image starting at 'offset' and
@@ -124,8 +122,6 @@ class SheepdogImage(object):
         """
         self._run_command("delete", None)
 
-    # glance-imageをsnapshotで保持するように変更するため,
-    # snapshot取得と削除用関数追加
     def create_snapshot(self):
         """
         Create this image in the Sheepdog cluster with size 'size'.
@@ -316,12 +312,12 @@ class Store(glance_store.driver.Store):
             # error occurs such as ImageSizeLimitExceeded exceptions.
             with excutils.save_and_reraise_exception():
                 image.delete()
-        # try-exceptでのエラーハンドリングは未だ実装していない
-        # glance-imageはsnapshotで保持するために, snapshot取得するよう変更
+        # TODO(saeki-masaki): add try-except error handling
+        # sheepdog driver uses snapshot vdi , so create snapshot
         image.create_snapshot()
 
-        # try-exceptでのエラーハンドリングは未だ実装していない
-        # glance-imageはsnapshotで保持するために, currentを削除
+        # TODO(saeki-masaki): add try-except error handling
+        # delete current vdi because sheepdog uses snapshot only
         image.delete()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
@@ -344,7 +340,5 @@ class Store(glance_store.driver.Store):
         if not image.exist():
             raise exceptions.NotFound(_("Sheepdog image %s does not exist") %
                                       loc.image)
-        # try-exceptでのエラーハンドリングは未だ実装していない
-        # glance-imageはsnapshotで保持するために, glance-imageの削除は
-        # snapshotの削除に相当
         image.delete_snapshot()
+        # sheepdog driver uses snapshot vdi , so delete snapshot
