@@ -338,7 +338,14 @@ class Store(glance_store.driver.Store):
         image = SheepdogImage(self.addr, self.port, loc.image,
                               self.WRITE_CHUNKSIZE)
         if not image.exist():
-            raise exceptions.NotFound(_("Sheepdog image %s does not exist") %
-                                      loc.image)
-        image.delete_snapshot()
-        # sheepdog driver uses snapshot vdi , so delete snapshot
+            msg = _("Sheepdog image %s does not exist") % loc.image
+            raise exceptions.NotFound(message=msg)
+
+        # delete the image that was stored as snapshot
+        try:
+            image.delete_snapshot()
+        except Exception as exc:
+            reason = _("Error in delete snapshot image")
+            LOG.error(reason)
+
+            raise exc

@@ -59,8 +59,62 @@ class TestSheepdogStore(base.StoreBaseTest,
             cmd.side_effect = _fake_run_command
             data = StringIO.StringIO('xx')
             self.store.add('fake_image_id', data, 2)
-            self.assertEqual(called_commands, ['list -r', 'create', 'write'])
+            self.assertEqual(self.called_commands,
+                             ['list -r', 'create', 'write',
+                              'snapshot -s snap', 'delete'])
 
     def test_partial_get(self):
         self.assertRaises(exceptions.StoreRandomGetNotSupported,
                           self.store.get, self.loc, chunk_size=1)
+
+    def test_delete(self):
+
+        def _fake_exist_true():
+            self.called_commands.append('exist')
+            return True
+
+        def _fake_delete_snapshot():
+            self.called_commands.append('delete_snapshot')
+            pass
+
+        with mock.patch.object(sheepdog.SheepdogImage, 'exist') as exist:
+            with mock.patch.object(sheepdog.SheepdogImage,
+                                   'delete_snapshot') as del_snap:
+                exist.side_effect = _fake_exist_true
+                del_snap.side_effect = _fake_delete_snapshot
+
+                self.store.delete(self.loc)
+
+                self.assertEqual(self.called_commands,
+                                 ['exist', 'delete_snapshot'])
+
+    def test_delete_image_not_found(self):
+
+        def _fake_exist_false():
+            return False
+
+        with mock.patch.object(sheepdog.SheepdogImage, 'exist') as exist:
+            exist.side_effect = _fake_exist_false
+            self.assertRaises(exceptions.NotFound,
+                              self.store.delete, self.loc)
+
+    def test_delete_image_failed(self):
+
+        def _fake_exist_true():
+            return True
+
+        def _fake_run_command(command, data, *params):
+            raise exceptions.BackendException()
+
+        with mock.patch.object(sheepdog.SheepdogImage, 'exist') as exist:
+            with mock.patch.object(sheepdog.SheepdogImage,
+                                   '_run_command') as cmd:
+                with mock.patch.object(sheepdog, 'LOG') as fake_logger:
+                    exist.side_effect = _fake_exist_true
+                    cmd.side_effect = _fake_run_command
+
+                    self.assertRaises(exceptions.BackendException,
+                                           self.store.delete, self.loc)
+
+                    expected = 'Error in delete snapshot image'
+                    fake_logger.error.assert_called_with(expected)
