@@ -27,7 +27,7 @@ import glance_store
 from glance_store import capabilities
 import glance_store.driver
 from glance_store import exceptions
-from glance_store.i18n import _
+from glance_store.i18n import _, _LE
 import glance_store.location
 
 # set default snapshot name
@@ -286,20 +286,21 @@ class Store(glance_store.driver.Store):
         :retval tuple of URL in backing store, bytes written, and checksum
         :raises `glance_store.exceptions.Duplicate` if the image already
                 existed
+        :raises `glance_store.exceptions.BackendException` if the image already
+                deleted
         """
 
         image = SheepdogImage(self.addr, self.port, image_id,
                               self.WRITE_CHUNKSIZE)
         if image.exist():
-            raise exceptions.Duplicate(_("Sheepdog image %s already exists")
-                                       % image_id)
+            raise exceptions.Duplicate(image=image_id)
 
         location = StoreLocation({'image': image_id}, self.conf)
         checksum = hashlib.md5()
 
-        image.create(image_size)
-
         try:
+            image.create(image_size)
+
             total = left = image_size
             while left > 0:
                 length = min(self.chunk_size, left)
@@ -307,18 +308,24 @@ class Store(glance_store.driver.Store):
                 image.write(data, total - left, length)
                 left -= length
                 checksum.update(data)
+
+            # create snapshot because images stores snapshot
+            image.create_snapshot()
+
         except Exception:
             # Note(zhiyan): clean up already received data when
             # error occurs such as ImageSizeLimitExceeded exceptions.
+            LOG.error(_LE('Error in create image'))
             with excutils.save_and_reraise_exception():
                 image.delete()
-        # TODO(saeki-masaki): add try-except error handling
-        # sheepdog driver uses snapshot vdi , so create snapshot
-        image.create_snapshot()
 
-        # TODO(saeki-masaki): add try-except error handling
-        # delete current vdi because sheepdog uses snapshot only
-        image.delete()
+        try:
+            # delete current image, use snapshot at sheepdog
+            image.delete()
+        except Exception:
+            LOG.error(_LE('Error in delete image'))
+            with excutils.save_and_reraise_exception():
+                image.delete_snapshot()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
 
@@ -344,8 +351,9 @@ class Store(glance_store.driver.Store):
         # delete the image that was stored as snapshot
         try:
             image.delete_snapshot()
-        except Exception as exc:
-            reason = _("Error in delete snapshot image")
+        except Exception:
+            reason = _LE('Error in delete snapshot image')
             LOG.error(reason)
-
-            raise exc
+            with excutils.save_and_reraise_exception():
+                # Reraise the original exception
+                pass
