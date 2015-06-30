@@ -31,7 +31,7 @@ from glance_store.i18n import _, _LE
 import glance_store.location
 
 # set default snapshot name
-DEFAULT_SNAPNAME = 'snap'
+DEFAULT_SNAPNAME = 'glance-image'
 
 LOG = logging.getLogger(__name__)
 

@@ -65,7 +65,7 @@ class TestSheepdogStore(base.StoreBaseTest,
         with mock.patch.object(sheepdog.SheepdogImage, '_run_command') as cmd:
             cmd.side_effect = _fake_run_command
             self.image.read(self.read_offset, self.read_count)
-            self.assertEqual(self.called_commands, ['read -s snap'])
+            self.assertEqual(self.called_commands, ['read -s glance-image'])
 
     def test_read_from_snapshot_fail(self):
 
@@ -89,7 +89,8 @@ class TestSheepdogStore(base.StoreBaseTest,
         with mock.patch.object(sheepdog.SheepdogImage, '_run_command') as cmd:
             cmd.side_effect = _fake_run_command
             self.image.create_snapshot()
-            self.assertEqual(self.called_commands, ['snapshot -s snap'])
+            self.assertEqual(self.called_commands,
+                             ['snapshot -s glance-image'])
 
     def test_create_snapshot_fail(self):
 
@@ -112,7 +113,7 @@ class TestSheepdogStore(base.StoreBaseTest,
         with mock.patch.object(sheepdog.SheepdogImage, '_run_command') as cmd:
             cmd.side_effect = _fake_run_command
             self.image.delete_snapshot()
-            self.assertEqual(self.called_commands, ['delete -s snap'])
+            self.assertEqual(self.called_commands, ['delete -s glance-image'])
 
     def test_delete_snapshot_fail(self):
 
@@ -162,7 +163,7 @@ class TestSheepdogStore(base.StoreBaseTest,
             ret = self.store.add('fake_image_id', self.data, 2)
             self.assertEqual(self.called_commands,
                              ['list -r', 'create', 'write',
-                              'snapshot -s snap', 'delete'])
+                              'snapshot -s glance-image', 'delete'])
             self.assertEqual(ret[0], 'sheepdog://fake_image_id')
             self.assertEqual(ret[1], 2)
             self.assertIsInstance(ret[2], str)
@@ -211,7 +212,7 @@ class TestSheepdogStore(base.StoreBaseTest,
             self.called_commands.append(command)
 
         def _fake_create_snapshot():
-            self.called_commands.append('snapshot -s snap')
+            self.called_commands.append('snapshot -s glance-image')
             raise exceptions.BackendException()
 
         with mock.patch.object(sheepdog.SheepdogImage, '_run_command') as cmd:
@@ -224,8 +225,8 @@ class TestSheepdogStore(base.StoreBaseTest,
                                       self.store.add, 'fake_image_id',
                                       self.data, 2)
                     self.assertEqual(self.called_commands,
-                                     ['list -r', 'create',
-                                      'write', 'snapshot -s snap', 'delete'])
+                                     ['list -r', 'create', 'write',
+                                      'snapshot -s glance-image', 'delete'])
                     expected = 'Error in create image'
                     fake_logger.error.assert_called_with(expected)
 
@@ -247,8 +248,8 @@ class TestSheepdogStore(base.StoreBaseTest,
                                       self.data, 2)
                     self.assertEqual(self.called_commands,
                                      ['list -r', 'create',
-                                      'write', 'snapshot -s snap', 'delete',
-                                      'delete -s snap'])
+                                      'write', 'snapshot -s glance-image',
+                                      'delete', 'delete -s glance-image'])
                     expected = 'Error in delete image'
                     fake_logger.error.assert_called_with(expected)
 
