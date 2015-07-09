@@ -132,9 +132,9 @@ class SheepdogImage(object):
 
     def delete_snapshot(self):
         """
-        Create this image in the Sheepdog cluster with size 'size'.
+        Delete this image from the Sheepdog cluster .
 
-        Sheepdog Usage: dog vdi create -s snap -a address -p port image size
+        Sheepdog Usage: dog vdi delete -s snap -a address -p port
         """
         self._run_command("delete -s %s" % DEFAULT_SNAPNAME, None)
 
@@ -315,16 +315,16 @@ class Store(glance_store.driver.Store):
         except Exception:
             # Note(zhiyan): clean up already received data when
             # error occurs such as ImageSizeLimitExceeded exceptions.
-            LOG.error(_LE('Error in create image'))
             with excutils.save_and_reraise_exception():
+                LOG.error(_LE('Error in create image'))
                 image.delete()
 
         try:
             # delete current image, use snapshot at sheepdog
             image.delete()
         except Exception:
-            LOG.error(_LE('Error in delete image'))
             with excutils.save_and_reraise_exception():
+                LOG.error(_LE('Error in delete image'))
                 image.delete_snapshot()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
@@ -352,8 +352,6 @@ class Store(glance_store.driver.Store):
         try:
             image.delete_snapshot()
         except Exception:
-            reason = _LE('Error in delete snapshot image')
-            LOG.error(reason)
             with excutils.save_and_reraise_exception():
                 # Reraise the original exception
-                pass
+                LOG.error(_LE('Error in delete snapshot image'))
