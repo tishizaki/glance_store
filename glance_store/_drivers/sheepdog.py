@@ -30,12 +30,12 @@ from glance_store import exceptions
 from glance_store.i18n import _, _LE
 import glance_store.location
 
-# set default snapshot name
-DEFAULT_SNAPNAME = 'glance-image'
+# Sheepdog VDI snapshot name for glance image
+GLANCE_SNAPNAME = 'glance-image'
 
 LOG = logging.getLogger(__name__)
 
-DEFAULT_ADDR = 'localhost'
+DEFAULT_ADDR = '127.0.0.1'
 DEFAULT_PORT = 7000
 DEFAULT_CHUNKSIZE = 64  # in MiB
 
@@ -85,7 +85,7 @@ class SheepdogImage(object):
         out = self._run_command("list -r", None)
         return long(out.split(' ')[3])
 
-    # read from snapshot image
+    # glance-image is stored in Sheepdog as snapshot, so read from snapshot.
     def read(self, offset, count):
         """
         Read up to 'count' bytes from this image starting at 'offset' and
@@ -94,7 +94,7 @@ class SheepdogImage(object):
         Sheepdog Usage:
                  dog vdi read -s snap -a address -p port image offset len
         """
-        return self._run_command("read -s %s" % DEFAULT_SNAPNAME,
+        return self._run_command("read -s %s" % GLANCE_SNAPNAME,
                                  None, str(offset), str(count))
 
     def write(self, data, offset, count):
@@ -128,7 +128,7 @@ class SheepdogImage(object):
 
         Sheepdog Usage: dog vdi create -s snap -a address -p port image size
         """
-        self._run_command("snapshot -s %s" % DEFAULT_SNAPNAME, None)
+        self._run_command("snapshot -s %s" % GLANCE_SNAPNAME, None)
 
     def delete_snapshot(self):
         """
@@ -136,7 +136,7 @@ class SheepdogImage(object):
 
         Sheepdog Usage: dog vdi delete -s snap -a address -p port
         """
-        self._run_command("delete -s %s" % DEFAULT_SNAPNAME, None)
+        self._run_command("delete -s %s" % GLANCE_SNAPNAME, None)
 
     def exist(self):
         """
@@ -303,7 +303,9 @@ class Store(glance_store.driver.Store):
 
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Create image failed'))
+                LOG.error(_LE('Fail to create glance-image as Sheepdog VDI. '
+                              'src image file: %(image)s, size: %(size)s'),
+                          {'image': image_file, 'size': image_size})
 
         try:
             total = left = image_size
@@ -321,7 +323,11 @@ class Store(glance_store.driver.Store):
             # Note(zhiyan): clean up already received data when
             # error occurs such as ImageSizeLimitExceeded exceptions.
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Write data or create snapshot failed'))
+                LOG.error(_LE('Fail to write data or create Sheepdog snapshot'
+                              'src image file: %(image)s, image size: %(size)s'
+                              'Sheepdog VDI name: %(vdiname)s'),
+                          {'image': image_file, 'size': image_size,
+                           'vdiname': image_id})
                 image.delete()
 
         try:
@@ -329,7 +335,9 @@ class Store(glance_store.driver.Store):
             image.delete()
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Delete image failed'))
+                LOG.error(_LE('Fail to delete temporary Sheepdog VDI'
+                              'Sheepdog VDI name: %(vdiname)s'),
+                          {'vdiname': image_id})
                 image.delete_snapshot()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
@@ -359,4 +367,7 @@ class Store(glance_store.driver.Store):
         except Exception:
             with excutils.save_and_reraise_exception():
                 # Reraise the original exception
-                LOG.error(_LE('Delete snapshot image'))
+                LOG.error(_LE('Fail to delete a Sheepdog snapshot of '
+                              'glance-image. VDI name: %(vdiname)s, '
+                              'snapshot name: %(snap)s'),
+                          {'vdiname': image.name, 'snap': GLANCE_SNAPNAME})
