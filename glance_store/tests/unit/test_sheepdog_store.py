@@ -179,7 +179,7 @@ class TestSheepdogStore(base.StoreBaseTest,
         fake_create.side_effect = _fake_create
         self.assertRaises(exceptions.BackendException,
                           self.store.add, 'fake_image_id', self.data, 2)
-        self.assertEqual(self.called_commands, ['list -r', 'create', 'delete'])
+        self.assertEqual(self.called_commands, ['list -r', 'create'])
         self.assertTrue(fake_logger.error.called)
 
     @mock.patch.object(sheepdog.SheepdogImage, 'create_snapshot')
