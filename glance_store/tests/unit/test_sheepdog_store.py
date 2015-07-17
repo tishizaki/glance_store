@@ -19,127 +19,108 @@ import StringIO
 import mock
 from oslo_concurrency import processutils
 
+import glance_store
 from glance_store._drivers import sheepdog
 from glance_store import exceptions
 from glance_store import location
 from glance_store.tests import base
 from glance_store.tests.unit import test_store_capabilities
 
+SHEEP_ADDR = '127.0.0.1'
+SHEEP_PORT = 7000
+VDI_NAME = 'image-id'
+SHEEP_CHUNK_SIZE = 64
+
 
 class TestSheepdogStore(base.StoreBaseTest,
                         test_store_capabilities.TestStoreCapabilitiesChecking):
 
     def setUp(self):
+        """Establish a clean test environment."""
+        super(TestSheepdogStore, self).setUp()
+        self.config(default_store='sheepdog', group='glance_store')
 
         def _fake_execute(*cmd, **kwargs):
             pass
 
-        self.addr = 'localhost'
-        self.port = 7000
-        self.name = '_fake_image_'
-        self.chunk_size = 64
-        """Establish a clean test environment."""
-        super(TestSheepdogStore, self).setUp()
-        self.config(default_store='sheepdog',
-                    group='glance_store')
-        execute = mock.patch.object(processutils, 'execute').start()
-        execute.side_effect = _fake_execute
-        self.addCleanup(execute.stop)
         self.store = sheepdog.Store(self.conf)
         self.store.configure()
-        self.image = sheepdog.SheepdogImage(self.addr, self.port, self.name,
-                                            self.chunk_size)
+        self.image = sheepdog.SheepdogImage(SHEEP_ADDR, SHEEP_PORT,
+                                            VDI_NAME, SHEEP_CHUNK_SIZE)
         self.called_commands = []
-        self.read_offset = 1
-        self.read_count = 1
         self.data = StringIO.StringIO('xx')
         self.loc = location.Location('test_sheepdog_store',
                                      sheepdog.StoreLocation,
                                      self.conf,
                                      store_specs={'image': 'fake_image_id'})
 
+    def _fake_run_command(self, command, data, *params):
+        self.called_commands.append(command)
+
+    def _fake_run_command_true(self, command, data, *params):
+        self.called_commands.append(command)
+        return True
+
+    @mock.patch.object(processutils, 'execute')
+    def test_run_command(self, fake_execute):
+        dummy_cmd = 'write'
+        data = self.data
+        offset = 1
+        count = 2
+        args = (dummy_cmd, self.data, str(offset), str(count))
+
+        # Test1: argument check
+        expected_cmd = (('dog vdi %(cmd)s -a %(addr)s -p %(port)s '
+                        '%(vdiname)s %(offset)s %(count)s') %
+                        {'cmd': dummy_cmd, 'addr': SHEEP_ADDR,
+                         'port': SHEEP_PORT, 'vdiname': VDI_NAME,
+                         'offset': str(offset), 'count': str(count)})
+        self.image._run_command(*args)
+        fake_execute.assert_called_once_with(expected_cmd,
+                                             process_input=data, shell=True)
+
+        # Test2: fail to execute command
+        fake_execute.reset_mock()
+        fake_execute.side_effect = processutils.ProcessExecutionError
+        self.assertRaises(glance_store.BackendException,
+                          self.image._run_command, *args)
+
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_read_from_snapshot(self, fake_run_command):
+        read_offset = 1
+        read_count = 1
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-
-        expected_cmd = ('read -s glance-image', mock.ANY, mock.ANY, mock.ANY)
-        self.image.read(self.read_offset, self.read_count)
+        expected_cmd = ('read -s glance-image', None,
+                        str(read_offset), str(read_count))
+        self.image.read(read_offset, read_count)
         fake_run_command.assert_called_once_with(*expected_cmd)
-
-    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
-    def test_read_from_snapshot_fail(self, fake_run_command):
-
-        msg = 'fake error log'
-        fake_run_command.side_effect = exceptions.BackendException(msg)
-        ex = self.assertRaises(exceptions.BackendException,
-                               self.image.read,
-                               self.read_offset, self.read_count)
-        self.assertEqual(msg, ex.message)
 
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_create_snapshot(self, fake_run_command):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         self.image.create_snapshot()
         self.assertEqual(self.called_commands,
                          ['snapshot -s glance-image'])
 
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
-    def test_create_snapshot_fail(self, fake_run_command):
-
-        msg = 'fake error log'
-        fake_run_command.side_effect = exceptions.BackendException(msg)
-        ex = self.assertRaises(exceptions.BackendException,
-                               self.image.create_snapshot)
-        self.assertEqual(msg, ex.message)
-
-    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_delete_snapshot(self, fake_run_command):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         self.image.delete_snapshot()
         self.assertEqual(self.called_commands, ['delete -s glance-image'])
 
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
-    def test_delete_snapshot_fail(self, fake_run_command):
-
-        msg = 'fake error log'
-        fake_run_command.side_effect = exceptions.BackendException(msg)
-        ex = self.assertRaises(exceptions.BackendException,
-                               self.image.delete_snapshot)
-        self.assertEqual(msg, ex.message)
-
-    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_exist(self, fake_run_command):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-            return True
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command_true
         self.assertTrue(self.image.exist())
         self.assertEqual(self.called_commands, ['list -r'])
 
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
-    def test_exist_fail(self, fake_run_command):
-
-        msg = 'fake error log'
-        fake_run_command.side_effect = exceptions.BackendException(msg)
-        ex = self.assertRaises(exceptions.BackendException,
-                               self.image.exist)
-        self.assertEqual(msg, ex.message)
-
-    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_add(self, fake_run_command):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         ret = self.store.add('fake_image_id', self.data, 2)
         self.assertEqual(self.called_commands,
                          ['list -r', 'create', 'write',
@@ -168,14 +149,11 @@ class TestSheepdogStore(base.StoreBaseTest,
     def test_add_image_create_fail(self, fake_logger, fake_run_command,
                                    fake_create):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-
         def _fake_create(size):
             self.called_commands.append('create')
             raise exceptions.BackendException()
 
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         fake_create.side_effect = _fake_create
         self.assertRaises(exceptions.BackendException,
                           self.store.add, 'fake_image_id', self.data, 2)
@@ -188,14 +166,11 @@ class TestSheepdogStore(base.StoreBaseTest,
     def test_add_image_snapshot_fail(self, fake_logger, fake_run_command,
                                      fake_create_snapshot):
 
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-
         def _fake_create_snapshot():
             self.called_commands.append('snapshot -s glance-image')
             raise exceptions.BackendException()
 
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         fake_create_snapshot.side_effect = _fake_create_snapshot
         self.assertRaises(exceptions.BackendException,
                           self.store.add, 'fake_image_id', self.data, 2)
@@ -209,14 +184,11 @@ class TestSheepdogStore(base.StoreBaseTest,
     @mock.patch.object(sheepdog, 'LOG')
     def test_add_image_delete_fail(self, fake_logger, fake_run_command,
                                    fake_delete):
-        def _fake_run_command(command, data, *params):
-            self.called_commands.append(command)
-
         def _fake_delete():
             self.called_commands.append('delete')
             raise exceptions.BackendException()
 
-        fake_run_command.side_effect = _fake_run_command
+        fake_run_command.side_effect = self._fake_run_command
         fake_delete.side_effect = _fake_delete
         self.assertRaises(exceptions.BackendException,
                           self.store.add, 'fake_image_id', self.data, 2)
