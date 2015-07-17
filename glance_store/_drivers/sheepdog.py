@@ -301,6 +301,11 @@ class Store(glance_store.driver.Store):
         try:
             image.create(image_size)
 
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_LE('Create image failed'))
+
+        try:
             total = left = image_size
             while left > 0:
                 length = min(self.chunk_size, left)
@@ -316,7 +321,7 @@ class Store(glance_store.driver.Store):
             # Note(zhiyan): clean up already received data when
             # error occurs such as ImageSizeLimitExceeded exceptions.
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Error in create image'))
+                LOG.error(_LE('Write data or create snapshot failed'))
                 image.delete()
 
         try:
@@ -324,7 +329,7 @@ class Store(glance_store.driver.Store):
             image.delete()
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Error in delete image'))
+                LOG.error(_LE('Delete image failed'))
                 image.delete_snapshot()
 
         return (location.get_uri(), image_size, checksum.hexdigest(), {})
@@ -354,4 +359,4 @@ class Store(glance_store.driver.Store):
         except Exception:
             with excutils.save_and_reraise_exception():
                 # Reraise the original exception
-                LOG.error(_LE('Error in delete snapshot image'))
+                LOG.error(_LE('Delete snapshot image'))
