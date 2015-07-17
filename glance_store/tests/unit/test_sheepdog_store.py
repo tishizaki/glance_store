@@ -18,7 +18,6 @@ import StringIO
 
 import mock
 from oslo_concurrency import processutils
-import six
 
 from glance_store._drivers import sheepdog
 from glance_store import exceptions
