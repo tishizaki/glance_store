@@ -21,6 +21,7 @@ from oslo_concurrency import processutils
 
 import glance_store
 from glance_store._drivers import sheepdog
+from glance_store.common import utils
 from glance_store import exceptions
 from glance_store import location
 from glance_store.tests import base
@@ -128,6 +129,26 @@ class TestSheepdogStore(base.StoreBaseTest,
         self.assertEqual(('sheepdog://fake_image_id', 2,
                          hashlib.md5(self.data.getvalue()).hexdigest(),
                          {}), ret)
+
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    @mock.patch.object(sheepdog.SheepdogImage, 'exist')
+    def test_add_get_image_size(self, fake_exist, fake_run_command):
+        fake_exist.return_value = False
+        ret = self.store.add('fake_image_id', self.data, 0)
+        self.assertEqual(2, ret[1])
+
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    @mock.patch.object(sheepdog.SheepdogImage, 'exist')
+    @mock.patch.object(utils, 'chunkreadable')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_add_get_image_size_fail(self, fake_logger, fake_chunkreadable,
+                                     fake_exist, fake_run_command):
+        fake_exist.return_value = False
+        fake_chunkreadable.side_effect = IOError()
+        self.assertRaises(IOError,
+                          self.store.add, 'fake_image_id',
+                          self.data, 0)
+        self.assertTrue(fake_logger.error.called)
 
     @mock.patch.object(sheepdog.SheepdogImage, 'exist')
     def test_add_image_already_exist(self, fake_exist):
