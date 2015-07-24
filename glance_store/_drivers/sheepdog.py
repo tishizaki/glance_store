@@ -24,12 +24,11 @@ from oslo_utils import excutils
 from oslo_utils import units
 
 import glance_store
-import glance_store.driver
-import glance_store.location
-
 from glance_store import capabilities
 from glance_store.common import utils
+import glance_store.driver
 from glance_store import exceptions
+import glance_store.location
 from glance_store.i18n import _, _LE
 
 # Sheepdog VDI snapshot name for glance image
@@ -300,15 +299,17 @@ class Store(glance_store.driver.Store):
         location = StoreLocation({'image': image_id}, self.conf)
         checksum = hashlib.md5()
 
-        if image_size == 0:
-            LOG.info(_("since image size is zero."
-                       "we will be check actual data "
-                       "so considerably slower than normal"))
+        try:
+            if image_size == 0:
+                chunks = utils.chunkreadable(image_file,
+                                             self.WRITE_CHUNKSIZE)
+                for chunk in chunks:
+                    image_size += len(chunk)
 
-            chunks = utils.chunkreadable(image_file,
-                                         self.WRITE_CHUNKSIZE)
-            for chunk in chunks:
-                image_size += len(chunk)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.error(_LE('Fail to read image file: %(image)s'),
+                          {'image': str(image_file)})
 
         try:
             image.create(image_size)
