@@ -88,13 +88,12 @@ class SheepdogImage(object):
 
     def resize(self, size):
         """
-        Read up to 'count' bytes from this image starting at 'offset' and
-        return the data.
+        Resize this image to new 'size' in the Sheepdog cluster.
 
         Sheepdog Usage:
-                 dog vdi read -s snap -a address -p port image offset len
+                 dog vdi resize -a address -p port image size
         """
-        return self._run_command("resize ", None, str(size))
+        self._run_command("resize", None, str(size))
 
     # glance-image is stored in Sheepdog as snapshot, so read from snapshot.
     def read(self, offset, count):
@@ -329,7 +328,8 @@ class Store(glance_store.driver.Store):
                     offset += len(chunk)
             except Exception:
                 with excutils.save_and_reraise_exception():
-                    LOG.error(_LE('Fail to write glance image: %s.'), image_id)
+                    LOG.error(_LE('Fail to extend image file or '
+                                  'write data: %s.'), image_id)
                     image.delete()
         else:
             try:
@@ -347,7 +347,6 @@ class Store(glance_store.driver.Store):
                                   '%(size)s Sheepdog VDI name: %(vdiname)s.'),
                               {'image': image_file, 'size': image_size,
                                'vdiname': image_id})
-                    LOG.error(_LE('Fail to write glance image: %s.'), image_id)
                     image.delete()
 
         try:
