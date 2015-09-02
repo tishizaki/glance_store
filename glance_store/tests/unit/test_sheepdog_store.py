@@ -205,7 +205,8 @@ class TestSheepdogStore(base.StoreBaseTest,
 
         fake_run_command.side_effect = self._fake_run_command
         fake_resize.side_effect = _fake_resize
-        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 0)
+        self.assertRaises(exceptions.BackendException,
+                          self.store.add, 'fake_image_id', self.data, 0)
         self.assertEqual(expected_commands, self.called_commands)
         self.assertTrue(fake_logger.error.called)
 
@@ -213,7 +214,7 @@ class TestSheepdogStore(base.StoreBaseTest,
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     @mock.patch.object(sheepdog, 'LOG')
     def test_add_image_write_fail(self, fake_logger,
-                                   fake_run_command, fake_write):
+                                  fake_run_command, fake_write):
         expected_commands = ['list -r', 'create', 'resize', 'write', 'delete']
 
         def _fake_write(*args):
@@ -222,7 +223,8 @@ class TestSheepdogStore(base.StoreBaseTest,
 
         fake_run_command.side_effect = self._fake_run_command
         fake_write.side_effect = _fake_write
-        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 0)
+        self.assertRaises(exceptions.BackendException, self.store.add,
+                          'fake_image_id', self.data, 0)
         self.assertEqual(expected_commands, self.called_commands)
         self.assertTrue(fake_logger.error.called)
 
@@ -230,7 +232,7 @@ class TestSheepdogStore(base.StoreBaseTest,
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     @mock.patch.object(sheepdog, 'LOG')
     def test_add_image_write_fail_size(self, fake_logger,
-                                   fake_run_command, fake_write):
+                                       fake_run_command, fake_write):
         expected_commands = ['list -r', 'create', 'write', 'delete']
 
         def _fake_write(*args):
@@ -239,7 +241,8 @@ class TestSheepdogStore(base.StoreBaseTest,
 
         fake_run_command.side_effect = self._fake_run_command
         fake_write.side_effect = _fake_write
-        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 2)
+        self.assertRaises(exceptions.BackendException, self.store.add,
+                          'fake_image_id', self.data, 2)
         self.assertEqual(expected_commands, self.called_commands)
         self.assertTrue(fake_logger.error.called)
 
