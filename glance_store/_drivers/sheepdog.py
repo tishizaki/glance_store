@@ -86,6 +86,16 @@ class SheepdogImage(object):
         out = self._run_command("list -r", None)
         return long(out.split(' ')[3])
 
+    def resize(self, size):
+        """
+        Read up to 'count' bytes from this image starting at 'offset' and
+        return the data.
+
+        Sheepdog Usage:
+                 dog vdi read -s snap -a address -p port image offset len
+        """
+        return self._run_command("resize ", None, str(size))
+
     # glance-image is stored in Sheepdog as snapshot, so read from snapshot.
     def read(self, offset, count):
         """
@@ -300,47 +310,55 @@ class Store(glance_store.driver.Store):
         checksum = hashlib.md5()
 
         try:
-            if image_size == 0:
-                chunks = utils.chunkreadable(image_file,
-                                             self.WRITE_CHUNKSIZE)
-                for chunk in chunks:
-                    image_size += len(chunk)
-
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Fail to read image file: %(image)s.'),
-                          {'image': str(image_file)})
-
-        try:
             image.create(image_size)
-
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.error(_LE('Fail to create glance-image as Sheepdog VDI. '
                               'src image file: %(image)s, size: %(size)s.'),
                           {'image': image_file, 'size': image_size})
 
-        try:
-            total = left = image_size
-            while left > 0:
-                length = min(self.chunk_size, left)
-                data = image_file.read(length)
-                image.write(data, total - left, length)
-                left -= length
-                checksum.update(data)
+        if image_size == 0:
+            try:
+                chunks = utils.chunkreadable(image_file, self.WRITE_CHUNKSIZE)
+                offset = 0
+                for chunk in chunks:
+                    image_size += len(chunk)
+                    image.resize(image_size)
+                    image.write(chunk, offset, len(chunk))
+                    checksum.update(chunk)
+                    offset += len(chunk)
+            except Exception:
+                with excutils.save_and_reraise_exception():
+                    LOG.error(_LE('Fail to write glance image: %s.'), image_id)
+                    image.delete()
+        else:
+            try:
+                total = left = image_size
+                while left > 0:
+                    length = min(self.chunk_size, left)
+                    data = image_file.read(length)
+                    image.write(data, total - left, length)
+                    left -= length
+                    checksum.update(data)
+            except Exception:
+                with excutils.save_and_reraise_exception():
+                    LOG.error(_LE('Fail to read image file or write data '
+                                  'src image file: %(image)s, image size: '
+                                  '%(size)s Sheepdog VDI name: %(vdiname)s.'),
+                              {'image': image_file, 'size': image_size,
+                               'vdiname': image_id})
+                    LOG.error(_LE('Fail to write glance image: %s.'), image_id)
+                    image.delete()
 
+        try:
             # create snapshot because images stores snapshot
             image.create_snapshot()
-
         except Exception:
             # Note(zhiyan): clean up already received data when
             # error occurs such as ImageSizeLimitExceeded exceptions.
             with excutils.save_and_reraise_exception():
-                LOG.error(_LE('Fail to write data or create Sheepdog snapshot '
-                              'src image file: %(image)s, image size: '
-                              '%(size)s Sheepdog VDI name: %(vdiname)s.'),
-                          {'image': image_file, 'size': image_size,
-                           'vdiname': image_id})
+                LOG.error(_LE('Fail to create Sheepdog snapshot '
+                              'Sheepdog VDI name: %s.'), image_id)
                 image.delete()
 
         try:
