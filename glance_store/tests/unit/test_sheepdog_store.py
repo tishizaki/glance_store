@@ -90,6 +90,15 @@ class TestSheepdogStore(base.StoreBaseTest,
                           self.image._run_command, *args)
 
     @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    def test_resize(self, fake_run_command):
+        new_size = 1234567890
+
+        expected_command = ('resize', None, str(new_size))
+        fake_run_command.side_effect = self._fake_run_command
+        self.image.resize(new_size)
+        fake_run_command.assert_called_once_with(*expected_command)
+
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
     def test_read_from_snapshot(self, fake_run_command):
         read_offset = 1
         read_count = 1
@@ -180,6 +189,57 @@ class TestSheepdogStore(base.StoreBaseTest,
         fake_create.side_effect = _fake_create
         self.assertRaises(exceptions.BackendException,
                           self.store.add, 'fake_image_id', self.data, 2)
+        self.assertEqual(expected_commands, self.called_commands)
+        self.assertTrue(fake_logger.error.called)
+
+    @mock.patch.object(sheepdog.SheepdogImage, 'resize')
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_add_image_resize_fail(self, fake_logger,
+                                   fake_run_command, fake_resize):
+        expected_commands = ['list -r', 'create', 'resize', 'delete']
+
+        def _fake_resize(*args):
+            self.called_commands.append('resize')
+            raise exceptions.BackendException()
+
+        fake_run_command.side_effect = self._fake_run_command
+        fake_resize.side_effect = _fake_resize
+        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 0)
+        self.assertEqual(expected_commands, self.called_commands)
+        self.assertTrue(fake_logger.error.called)
+
+    @mock.patch.object(sheepdog.SheepdogImage, 'write')
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_add_image_write_fail(self, fake_logger,
+                                   fake_run_command, fake_write):
+        expected_commands = ['list -r', 'create', 'resize', 'write', 'delete']
+
+        def _fake_write(*args):
+            self.called_commands.append('write')
+            raise exceptions.BackendException()
+
+        fake_run_command.side_effect = self._fake_run_command
+        fake_write.side_effect = _fake_write
+        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 0)
+        self.assertEqual(expected_commands, self.called_commands)
+        self.assertTrue(fake_logger.error.called)
+
+    @mock.patch.object(sheepdog.SheepdogImage, 'write')
+    @mock.patch.object(sheepdog.SheepdogImage, '_run_command')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_add_image_write_fail_size(self, fake_logger,
+                                   fake_run_command, fake_write):
+        expected_commands = ['list -r', 'create', 'write', 'delete']
+
+        def _fake_write(*args):
+            self.called_commands.append('write')
+            raise exceptions.BackendException()
+
+        fake_run_command.side_effect = self._fake_run_command
+        fake_write.side_effect = _fake_write
+        self.assertRaises(exceptions.BackendException, self.store.add, 'fake_image_id', self.data, 2)
         self.assertEqual(expected_commands, self.called_commands)
         self.assertTrue(fake_logger.error.called)
 
