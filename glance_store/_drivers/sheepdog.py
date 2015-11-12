@@ -97,7 +97,7 @@ class SheepdogImage(object):
         self._run_command("resize", None, str(size))
 
     # glance-image is stored in Sheepdog as snapshot, so read from snapshot.
-    def read(self, offset, count):
+    def read(self, offset, count, is_snapshot):
         """
         Read up to 'count' bytes from this image starting at 'offset' and
         return the data.
@@ -105,8 +105,11 @@ class SheepdogImage(object):
         Sheepdog Usage:
                  dog vdi read -s snap -a address -p port image offset len
         """
-        return self._run_command("read -s %s" % GLANCE_SNAPNAME,
-                                 None, str(offset), str(count))
+        if not is_snapshot:
+            return self._run_command("read", None, str(offset), str(count))
+        else:
+            return self._run_command("read -s %s" % GLANCE_SNAPNAME,
+                                     None, str(offset), str(count))
 
     def write(self, data, offset, count):
         """
@@ -155,11 +158,18 @@ class SheepdogImage(object):
 
         Sheepdog Usage: dog vdi list -r -a address -p port image
         """
+        ret = False
+        is_snapshot = False
         out = self._run_command("list -r", None)
         if not out:
-            return False
+            pass
+        elif out.startswith("s %s", self.name):
+            is_snapshot = True
+            ret = True
         else:
-            return True
+            ret = True
+
+        return (ret, is_snapshot)
 
 
 class StoreLocation(glance_store.location.StoreLocation):
@@ -195,9 +205,10 @@ class ImageIterator(object):
     def __iter__(self):
         image = self.image
         total = left = image.get_size()
+        (out, is_snapshot) = image.exist()
         while left > 0:
             length = min(image.chunk_size, left)
-            data = image.read(total - left, length)
+            data = image.read(total - left, length, is_snapshot)
             left -= len(data)
             yield data
         raise StopIteration()
@@ -259,7 +270,8 @@ class Store(glance_store.driver.Store):
         loc = location.store_location
         image = SheepdogImage(self.addr, self.port, loc.image,
                               self.READ_CHUNKSIZE)
-        if not image.exist():
+        (out, is_snapshot) = image.exist()
+        if not out:
             raise exceptions.NotFound(_("Sheepdog image %s does not exist")
                                       % image.name)
         return (ImageIterator(image), image.get_size())
@@ -278,7 +290,8 @@ class Store(glance_store.driver.Store):
         loc = location.store_location
         image = SheepdogImage(self.addr, self.port, loc.image,
                               self.READ_CHUNKSIZE)
-        if not image.exist():
+        (out, is_snapshot) = image.exist()
+        if not out:
             raise exceptions.NotFound(_("Sheepdog image %s does not exist")
                                       % image.name)
         return image.get_size()
@@ -303,7 +316,8 @@ class Store(glance_store.driver.Store):
 
         image = SheepdogImage(self.addr, self.port, image_id,
                               self.WRITE_CHUNKSIZE)
-        if image.exist():
+        (out, is_snapshot) = image.exist()
+        if out:
             raise exceptions.Duplicate(image=image_id)
 
         location = StoreLocation({'image': image_id}, self.conf)
@@ -388,17 +402,27 @@ class Store(glance_store.driver.Store):
         loc = location.store_location
         image = SheepdogImage(self.addr, self.port, loc.image,
                               self.WRITE_CHUNKSIZE)
-        if not image.exist():
+        (out, is_snapshot) = image.exist()
+        if not out:
             msg = _("Sheepdog image %s does not exist.") % loc.image
             raise exceptions.NotFound(message=msg)
-
-        # delete the image that was stored as snapshot
-        try:
-            image.delete_snapshot()
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                # Reraise the original exception
-                LOG.error(_LE('Fail to delete a Sheepdog snapshot of '
-                              'glance-image. VDI name: %(vdiname)s, '
-                              'snapshot name: %(snap)s.'),
+        elif not is_snapshot:
+            # Delete the image that was stored as volume
+            try:
+                image.delete()
+            except Exception:
+                with excutils.save_and_reraise_exception():
+                    # Reraise the original exception
+                    LOG.error(_LE('Fail to delete a Sheepdog volume of '
+                                  'glance-image. VDI name: %s.'), image.name)
+        else:
+            # Delete the image that was stored as snapshot
+            try:
+                image.delete_snapshot()
+            except Exception:
+                with excutils.save_and_reraise_exception():
+                    # Reraise the original exception
+                    LOG.error(_LE('Fail to delete a Sheepdog snapshot of '
+                                  'glance-image. VDI name: %(vdiname)s, '
+                                  'snapshot name: %(snap)s.'),
                           {'vdiname': image.name, 'snap': GLANCE_SNAPNAME})
